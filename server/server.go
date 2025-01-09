@@ -37,6 +37,7 @@ func ExpressionCalcHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, string(t), 422)
+		fmt.Println(422, 1)
 		return
 	}
 	w.WriteHeader(200)
@@ -46,19 +47,21 @@ func ExpressionCalcHandler(w http.ResponseWriter, r *http.Request) {
 func CheckMidlware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !checkExpression(Req.Expression) {
+			fmt.Println(Req.Expression)
 			t, err := json.Marshal(ErrorsJson{Err: "Expression is not valid"})
 			if err != nil {
 				http.Error(w, "Oppps something went wrong", 500)
 				return
 			}
 			http.Error(w, string(t), 422)
+			fmt.Println(422, 2)
 			return
 		}
 		next(w, r)
 	}
 }
 
-func loggingMiddleware(logger *zap.Logger) mux.MiddlewareFunc {
+func MidlwareLogging(logger *zap.Logger) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body == nil {
@@ -85,23 +88,23 @@ func checkExpression(exp string) bool {
 	return re.MatchString(exp)
 }
 
-func setupLogger() *zap.Logger {
+func SetupLogger() *zap.Logger {
 	config := zap.NewProductionConfig()
 	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 
 	logger, err := config.Build()
 	if err != nil {
-		fmt.Printf("Ошибка настройки логгера: %v\n", err)
+		fmt.Printf("Error with setting logger %v\n", err)
 	}
 	return logger
 }
 
 func StartServer() {
-	logger := setupLogger()
+	logger := SetupLogger()
 	r := mux.NewRouter()
-	r.Use(loggingMiddleware(logger))
+	r.Use(MidlwareLogging(logger))
 	r.HandleFunc("/api/v1/calculate", CheckMidlware(ExpressionCalcHandler))
-	logger.Info("Сервер запущен", zap.Int("port", 8080))
+	logger.Info("Server start", zap.Int("port", 8080))
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
 	}

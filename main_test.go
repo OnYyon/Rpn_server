@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/OnYyon/Rpn_server.git/server"
+	"github.com/gorilla/mux"
 )
 
 type Tests struct {
@@ -27,6 +28,10 @@ func TestFormatexpression(t *testing.T) {
 		{exp: "10*2+5", output: 25},
 		{exp: "10+2*5", output: 20},
 	}
+	logger := server.SetupLogger()
+	r := mux.NewRouter()
+	r.Use(server.MidlwareLogging(logger))
+	r.HandleFunc("/api/v1/calculate", server.CheckMidlware(server.ExpressionCalcHandler))
 	for _, tt := range testCases {
 		reqBody, _ := json.Marshal(server.Request{Expression: tt.exp})
 		req, err := http.NewRequest("POST", "/api/v1/calculate", bytes.NewBuffer(reqBody))
@@ -34,8 +39,7 @@ func TestFormatexpression(t *testing.T) {
 			t.Fatal(err)
 		}
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(server.CheckMidlware(server.ExpressionCalcHandler))
-		handler.ServeHTTP(rr, req)
+		r.ServeHTTP(rr, req)
 		if status := rr.Code; status != 200 {
 			t.Errorf("handler returned wrong status code: got %v want %v", status, 200)
 		}
@@ -54,11 +58,13 @@ func TestCheckMidlware_NoBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	logger := server.SetupLogger()
+	r := mux.NewRouter()
+	r.Use(server.MidlwareLogging(logger))
+	r.HandleFunc("/api/v1/calculate", server.CheckMidlware(server.ExpressionCalcHandler))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(server.CheckMidlware(server.ExpressionCalcHandler))
-	handler.ServeHTTP(rr, req)
+	r.ServeHTTP(rr, req)
 
 	if status := rr.Code; status != 500 {
 		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusBadRequest)
