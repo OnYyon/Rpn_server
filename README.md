@@ -43,7 +43,7 @@ go run main.go
     curl -X POST -H "Content-Type: application/json" -d '{"expression": "((7+1)/(2+2)*4)/8*(32-((4+12)*2))-1"}' http://localhost:8080/api/v1/calculate
     ```
     Ответ: {"result":-1}
-2. Невадидно выражение (422 code status)
+2. Не прваильное выражение (422 code status)
     ``` shell
     curl -X POST -H "Content-Type: application/json" -d '{"expression": "2+a"}' http://localhost:8080/api/v1/calculate 
     ```
