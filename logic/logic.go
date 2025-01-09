@@ -131,6 +131,6 @@ func convert_to_reverse_pollish_notation(pattern string) ([]string, error) {
 	return ouput_stack, nil
 }
 
-func main() {
-	fmt.Println(Calc("((7+1)/(2+2)*4)/8*(32-((4+12)*2))-1"))
+func Start() {
+	fmt.Println(Calc("2 + 2 * 2"))
 }

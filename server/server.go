@@ -8,66 +8,101 @@ import (
 	"regexp"
 
 	"github.com/OnYyon/Rpn_server.git/logic"
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Request struct {
 	Expression string `json:"expression"`
 }
 
+type ResultJson struct {
+	Result float64 `json:"result"`
+}
+
 type ErrorsJson struct {
 	Err string `json:"error"`
 }
 
+var Req Request
+
 func ExpressionCalcHandler(w http.ResponseWriter, r *http.Request) {
-	var req Request
-	err := json.NewDecoder(r.Body).Decode(&req)
+	w.Header().Set("Content-Type", "application/json")
+	res, err := logic.Calc(Req.Expression)
 	if err != nil {
-		w.WriteHeader(500)
-		return
-	}
-	res, err := logic.Calc(req.Expression)
-	if err != nil {
-		t, _ := json.Marshal(ErrorsJson{Err: "Expression is not valid"})
-		w.WriteHeader(422)
-		fmt.Fprint(w, string(t))
+		t, err := json.Marshal(ErrorsJson{Err: "Expression is not valid"})
+		if err != nil {
+			http.Error(w, "Oppps somthing went wrong", 500)
+			return
+		}
+		http.Error(w, string(t), 422)
 		return
 	}
 	w.WriteHeader(200)
-	fmt.Println(res)
+	json.NewEncoder(w).Encode(ResultJson{Result: res})
 }
 
 func CheckMidlware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req Request
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
-			return
-		}
-		if !checkExpression(req.Expression) {
-			t, _ := json.Marshal(ErrorsJson{Err: "Expression is not valid"})
-			w.WriteHeader(422)
-			fmt.Fprint(w, string(t))
+		if !checkExpression(Req.Expression) {
+			t, err := json.Marshal(ErrorsJson{Err: "Expression is not valid"})
+			if err != nil {
+				http.Error(w, "Oppps something went wrong", 500)
+				return
+			}
+			http.Error(w, string(t), 422)
 			return
 		}
 		next(w, r)
 	}
 }
 
+func loggingMiddleware(logger *zap.Logger) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body == nil {
+				http.Error(w, "Oppps somthing went wrong", 500)
+				return
+			}
+			err := json.NewDecoder(r.Body).Decode(&Req)
+			if err != nil {
+				http.Error(w, "Oppps somthing went wrong", 500)
+				return
+			}
+			defer r.Body.Close()
+			logger.Info("Http запрос",
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.Path),
+				zap.String("exp", Req.Expression))
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func checkExpression(exp string) bool {
-	re := regexp.MustCompile("^[0-9+-/*()/s]+$")
+	re := regexp.MustCompile(`^[0-9+-\/*()\s]+$`)
 	return re.MatchString(exp)
 }
 
-func SimpleHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Hello, guest!")
+func setupLogger() *zap.Logger {
+	config := zap.NewProductionConfig()
+	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
+
+	logger, err := config.Build()
+	if err != nil {
+		fmt.Printf("Ошибка настройки логгера: %v\n", err)
+	}
+	return logger
 }
 
 func StartServer() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/calculate", CheckMidlware(ExpressionCalcHandler))
-	mux.HandleFunc("/", SimpleHandler)
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	logger := setupLogger()
+	r := mux.NewRouter()
+	r.Use(loggingMiddleware(logger))
+	r.HandleFunc("/api/v1/calculate", CheckMidlware(ExpressionCalcHandler))
+	logger.Info("Сервер запущен", zap.Int("port", 8080))
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
 	}
 }
