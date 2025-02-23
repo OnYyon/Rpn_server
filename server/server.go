@@ -37,7 +37,6 @@ func ExpressionCalcHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, string(t), 422)
-		fmt.Println(422, 1)
 		return
 	}
 	w.WriteHeader(200)
